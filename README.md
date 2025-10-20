@@ -1166,7 +1166,7 @@ MATRIX_DAMAGE_DISPLACEMENT = 0.0001  # 增加
 
 ## 🔗 相关项目
 
-- [2D RVE Model Generator](https://github.com/yourusername/2D_RVE_Model) - 二维版本
+- [2D RVE Model Generator](https://github.com/ZPL-03/2D_RVE_Model) - 二维版本
 
 ---
 
