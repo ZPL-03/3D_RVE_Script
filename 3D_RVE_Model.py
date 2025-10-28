@@ -264,60 +264,66 @@ def pairBoundaryNodes3D(slave_nodes, master_nodes, tolerance, coord_indices):
     return paired_nodes
 
 
-def applyPeriodicConstraints3D(model, instanceName, node_pairs, pair_type):
-    """施加三维周期性约束
+def applyPeriodicConstraints3D(model, instanceName, node_pairs, pair_type, constrained_nodes_set):
+    """施加三维周期性约束 (避免重复约束节点自由度)
 
     参数:
-        model: Abaqus模型对象
-        instanceName: 实例名称
-        node_pairs: 节点配对列表 [(node1, node2), ...]
-        pair_type: 配对类型 ('Left-Right', 'Front-Back', 或 'Bottom-Top')
-
-    功能:
-        为每对节点创建约束方程: u_slave - u_master + u_ref = 0
-        对X、Y、Z三个方向分别创建约束方程
+        model: Abaqus 模型对象.
+        instanceName: RVE 实例的名称.
+        node_pairs: 包含 (从节点_node, 主节点_node) 元组的列表.
+        pair_type: 字符串 ('Left-Right', 'Front-Back', 'Bottom-Top').
+        constrained_nodes_set: 一个包含已被约束节点标签的集合 (set).
+                               此函数将更新这个集合.
     """
     r_assy = model.rootAssembly
     inst = r_assy.instances[instanceName]
 
+    # 根据配对类型确定参考点名称、节点集标签前缀
     if pair_type == 'Left-Right':
         ref_point_name = 'set_RefPoint_X'
-        tag1, tag2 = 'L', 'R'
+        tag1, tag2 = 'L', 'R'  # tag1 是从面(Slave), tag2 是主面(Master)
     elif pair_type == 'Front-Back':
         ref_point_name = 'set_RefPoint_Y'
-        tag1, tag2 = 'F', 'B'
+        tag1, tag2 = 'F', 'B'  # tag1 是从面(Slave), tag2 是主面(Master)
     elif pair_type == 'Bottom-Top':
         ref_point_name = 'set_RefPoint_Z'
-        tag1, tag2 = 'Bo', 'T'
+        tag1, tag2 = 'Bo', 'T'  # tag1 是从面(Slave), tag2 是主面(Master)
     else:
+        print("    ERROR: Unknown pair_type in applyPeriodicConstraints3D: %s" % pair_type)
         return
 
-    coeffs = (1.0, -1.0, 1.0)
-
-    for i, (node1, node2) in enumerate(node_pairs):
-        set1_name = 'set_Node-%s-%d' % (tag1, i + 1)
-        set2_name = 'set_Node-%s-%d' % (tag2, i + 1)
+    # 定义方程约束的系数: u_slave - u_master - u_ref = 0
+    # 假设参考点正位移对应正的平均应变:
+    # U_right - U_left = Disp_X => U_left = U_right - Disp_X
+    # 方程形式: 1.0 * U_left - 1.0 * U_right + 1.0 * Disp_X = 0
+    coeffs = (1.0, -1.0, 1.0)  # 分别对应 (从节点, 主节点, 参考点)
+    nodes_constrained_in_this_call = 0  # 记录本次调用中实际约束了多少个新的从节点
+    for i, (node1, node2) in enumerate(node_pairs):  # node1 是从节点(slave), node2 是主节点(master)
+        # --- 检查从节点是否已经被之前的约束处理过 ---
+        if node1.label in constrained_nodes_set:
+            # 如果从节点的标签已经在集合中,跳过此节点对,避免重复约束
+            continue
+            # --- 如果从节点未被约束,则创建临时节点集并施加约束 ---
+        set1_name = 'set_Node-%s-%d' % (tag1, i + 1)  # 从节点集
+        set2_name = 'set_Node-%s-%d' % (tag2, i + 1)  # 主节点集
 
         r_assy.Set(nodes=inst.nodes.sequenceFromLabels(labels=(node1.label,)), name=set1_name)
         r_assy.Set(nodes=inst.nodes.sequenceFromLabels(labels=(node2.label,)), name=set2_name)
-
-        # X方向约束
+        # X方向约束 (DOF 1)
         model.Equation(name='Eq-%s%s-X-%d' % (tag1, tag2, i + 1),
-                       terms=((coeffs[0], set1_name, 1),
-                              (coeffs[1], set2_name, 1),
-                              (coeffs[2], ref_point_name, 1)))
-
-        # Y方向约束
+                       terms=((coeffs[0], set1_name, 1), (coeffs[1], set2_name, 1), (coeffs[2], ref_point_name, 1)))
+        # Y方向约束 (DOF 2)
         model.Equation(name='Eq-%s%s-Y-%d' % (tag1, tag2, i + 1),
-                       terms=((coeffs[0], set1_name, 2),
-                              (coeffs[1], set2_name, 2),
-                              (coeffs[2], ref_point_name, 2)))
-
-        # Z方向约束
+                       terms=((coeffs[0], set1_name, 2), (coeffs[1], set2_name, 2), (coeffs[2], ref_point_name, 2)))
+        # Z方向约束 (DOF 3)
         model.Equation(name='Eq-%s%s-Z-%d' % (tag1, tag2, i + 1),
-                       terms=((coeffs[0], set1_name, 3),
-                              (coeffs[1], set2_name, 3),
-                              (coeffs[2], ref_point_name, 3)))
+                       terms=((coeffs[0], set1_name, 3), (coeffs[1], set2_name, 3), (coeffs[2], ref_point_name, 3)))
+        # --- 将处理过的从节点标签添加到集合中 ---
+        constrained_nodes_set.add(node1.label)
+        nodes_constrained_in_this_call += 1  # 增加计数
+
+    # 打印本次调用实际约束了多少个新的从节点
+    print("    Applied %s constraints to %d new slave nodes." % (pair_type, nodes_constrained_in_this_call))
 
 
 # =================================================================
@@ -695,7 +701,7 @@ def buildAllFiberCenters3D(fiber_centers, rveSize, fiberRadius):
         fiberRadius: 纤维半径
 
     返回:
-        unique_centers: 包含所有周期性镜像的纤维中心列表
+        all_fiber_centers: 包含所有周期性镜像的纤维中心列表
 
     功能:
         为靠近XY平面边界的纤维创建周期性镜像,用于准确判断体(cell)的归属
@@ -723,8 +729,6 @@ def buildAllFiberCenters3D(fiber_centers, rveSize, fiberRadius):
             all_fiber_centers.append((xt, yt - rveSize[1]))
 
         # 对角周期性 - 只在纤维真正靠近边角顶点时创建镜像
-        # 这样可以避免过多的重复镜像,提高效率
-
         # 左下角 (0, 0)
         if xt < fiberRadius and yt < fiberRadius:
             dist_to_corner = math.sqrt(xt ** 2 + yt ** 2)
@@ -749,20 +753,7 @@ def buildAllFiberCenters3D(fiber_centers, rveSize, fiberRadius):
             if dist_to_corner < fiberRadius:
                 all_fiber_centers.append((xt - rveSize[0], yt + rveSize[1]))
 
-    # 去除重复点(可能在边角处产生)
-    unique_centers = []
-    tolerance = 1e-6
-
-    for center in all_fiber_centers:
-        is_duplicate = False
-        for existing in unique_centers:
-            if abs(center[0] - existing[0]) < tolerance and abs(center[1] - existing[1]) < tolerance:
-                is_duplicate = True
-                break
-        if not is_duplicate:
-            unique_centers.append(center)
-
-    return unique_centers
+    return all_fiber_centers
 
 
 def getCellCenterFromVertices(cell):
@@ -879,7 +870,6 @@ def classifyCellsImproved(all_cells, fiber_centers, rveSize, fiberRadius, rveVol
               (len(potential_cells), len(all_fiber_centers)))
         print("    Perfect match - all potential cells are fibers")
         fiber_cells_list = potential_cells
-        matrix_fragment_count = 0
 
     else:
         # 一般情况:体数量 > 纤维数量,存在基体碎片
@@ -1591,21 +1581,21 @@ def create3DRVEModel(modelName='Model-1',
     print("  Min mesh size: %.6f" % (globalSeedSize * minSizeFactor))
     print("  PBC pairing tolerance: %.6f (%.1fx global mesh size)" %
           (pairing_tolerance, pairingToleranceFactor))
-
+    # Left(Slave) vs Right(Master)
     if len(nodes_left) <= len(nodes_right):
         lr_pairs = pairBoundaryNodes3D(nodes_left, nodes_right,
                                        pairing_tolerance, (1, 2))
     else:
         lr_pairs = [(p[1], p[0]) for p in pairBoundaryNodes3D(
             nodes_right, nodes_left, pairing_tolerance, (1, 2))]
-
+    # Front(Slave) vs Back(Master)
     if len(nodes_front) <= len(nodes_back):
         fb_pairs = pairBoundaryNodes3D(nodes_front, nodes_back,
                                        pairing_tolerance, (0, 2))
     else:
         fb_pairs = [(p[1], p[0]) for p in pairBoundaryNodes3D(
             nodes_back, nodes_front, pairing_tolerance, (0, 2))]
-
+    # Bottom(Slave) vs Top(Master)
     if len(nodes_bottom) <= len(nodes_top):
         bt_pairs = pairBoundaryNodes3D(nodes_bottom, nodes_top,
                                        pairing_tolerance, (0, 1))
@@ -1621,11 +1611,11 @@ def create3DRVEModel(modelName='Model-1',
     unpaired_top = len(nodes_top) - len(bt_pairs)
 
     print("\n  Boundary Node Pairing Results:")
-    print("    Left/Right (X): %d pairs from %d/%d nodes" %
+    print("    Left/Right (X): %d pairs from %d/%d nodes (Slave/Master)" %
           (len(lr_pairs), len(nodes_left), len(nodes_right)))
-    print("    Front/Back (Y): %d pairs from %d/%d nodes" %
+    print("    Front/Back (Y): %d pairs from %d/%d nodes (Slave/Master)" %
           (len(fb_pairs), len(nodes_front), len(nodes_back)))
-    print("    Bottom/Top (Z): %d pairs from %d/%d nodes" %
+    print("    Bottom/Top (Z): %d pairs from %d/%d nodes (Slave/Master)" %
           (len(bt_pairs), len(nodes_bottom), len(nodes_top)))
 
     total_unpaired_x = unpaired_left + unpaired_right
@@ -1645,11 +1635,16 @@ def create3DRVEModel(modelName='Model-1',
     if total_unpaired_x == 0 and total_unpaired_y == 0 and total_unpaired_z == 0:
         print("    SUCCESS: All boundary nodes paired successfully!")
 
-    applyPeriodicConstraints3D(model, 'RVE-3D-1', lr_pairs, 'Left-Right')
-    applyPeriodicConstraints3D(model, 'RVE-3D-1', fb_pairs, 'Front-Back')
-    applyPeriodicConstraints3D(model, 'RVE-3D-1', bt_pairs, 'Bottom-Top')
+    # 初始化一个空的集合,用于跟踪已经被约束过的从节点标签
+    constrained_nodes = set()
+    print("\n  Applying Left-Right Constraints (X)...")
+    applyPeriodicConstraints3D(model, 'RVE-3D-1', lr_pairs, 'Left-Right', constrained_nodes)
+    print("\n  Applying Front-Back Constraints (Y)...")
+    applyPeriodicConstraints3D(model, 'RVE-3D-1', fb_pairs, 'Front-Back', constrained_nodes)
+    print("\n  Applying Bottom-Top Constraints (Z)...")
+    applyPeriodicConstraints3D(model, 'RVE-3D-1', bt_pairs, 'Bottom-Top', constrained_nodes)
 
-    print("Step 10 Complete.")
+    print("\nStep 10 Complete.")
 
     # ==================== 步骤 11: 清理多余Part ====================
     print("\nStep 11: Cleaning up temporary parts...")
