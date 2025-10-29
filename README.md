@@ -1130,7 +1130,7 @@ MATRIX_DAMAGE_DISPLACEMENT = 0.0001  # 增加
   author = {刘正鹏},
   title = {ABAQUS三维RVE建模工具},
   year = {2025},
-  url = {https://github.com/yourusername/3D_RVE_Model},
+  url = {https://github.com/ZPL-03/3D_RVE_Model},
   version = {1.0}
 }
 ```
