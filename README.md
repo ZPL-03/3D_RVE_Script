@@ -65,7 +65,7 @@ All required modules are included in ABAQUS installation.
 
 1. **Clone or Download**
    ```bash
-   git clone https://github.com/yourusername/3D_RVE_Model.git
+   git clone https://github.com/ZPL-03/3D_RVE_Model.git
    cd 3D_RVE_Model
    ```
 
@@ -550,7 +550,7 @@ If you use this code in your research:
   author = {Liu, Zhengpeng},
   title = {3D RVE Model Generator for ABAQUS},
   year = {2025},
-  url = {https://github.com/yourusername/3D_RVE_Model},
+  url = {https://github.com/ZPL-03/3D_RVE_Model},
   version = {1.0}
 }
 ```
@@ -558,7 +558,7 @@ If you use this code in your research:
 ## 👤 Author
 
 **Liu Zhengpeng (刘正鹏)**
-- GitHub: [@小盆i](https://github.com/yourusername)
+- GitHub: [@小盆i](https://github.com/ZPL-03)
 - Email: 1370872708@qq.com / Zhengpeng0105@gmail.com
 - Technical Blog: CSDN/知乎 @小盆i
 
@@ -1138,7 +1138,7 @@ MATRIX_DAMAGE_DISPLACEMENT = 0.0001  # 增加
 ## 👤 作者
 
 **刘正鹏 (Liu Zhengpeng)**
-- GitHub: [@小盆i](https://github.com/yourusername)
+- GitHub: [@小盆i](https://github.com/ZPL-03)
 - 邮箱: 1370872708@qq.com / Zhengpeng0105@gmail.com
 - 技术博客: CSDN/知乎 @小盆i
 
