@@ -27,7 +27,6 @@
 # 作者: 刘正鹏 (Liu Zhengpeng)
 # 版本: v1.0
 # 创建日期: 2025-09-30
-# 最后更新: 2025-XX-XX
 # 适用软件: ABAQUS 2023
 # Python版本: 2.7 (ABAQUS内置)
 # 技术交流: GitHub/CSDN/知乎 @小盆i
@@ -300,7 +299,7 @@ def applyPeriodicConstraints3D(model, instanceName, node_pairs, pair_type, const
     nodes_constrained_in_this_call = 0  # 记录本次调用中实际约束了多少个新的从节点
     for i, (node1, node2) in enumerate(node_pairs):  # node1 是从节点(slave), node2 是主节点(master)
         # --- 检查从节点是否已经被之前的约束处理过 ---
-        if node1.label in constrained_nodes_set:
+        if node1.label in constrained_nodes_set or node2.label in constrained_nodes_set:
             # 如果从节点的标签已经在集合中,跳过此节点对,避免重复约束
             continue
             # --- 如果从节点未被约束,则创建临时节点集并施加约束 ---
@@ -320,6 +319,7 @@ def applyPeriodicConstraints3D(model, instanceName, node_pairs, pair_type, const
                        terms=((coeffs[0], set1_name, 3), (coeffs[1], set2_name, 3), (coeffs[2], ref_point_name, 3)))
         # --- 将处理过的从节点标签添加到集合中 ---
         constrained_nodes_set.add(node1.label)
+        constrained_nodes_set.add(node2.label)
         nodes_constrained_in_this_call += 1  # 增加计数
 
     # 打印本次调用实际约束了多少个新的从节点
@@ -1552,7 +1552,7 @@ def create3DRVEModel(modelName='Model-1',
 
         if len(p_rve.sets['set_CohesiveElements'].elements) > 0:
             elemType_coh = ElemType(elemCode=COH3D8, elemLibrary=STANDARD,
-                                    elemDeletion=ON, maxDegradation=0.99)
+                                    elemDeletion=ON, maxDegradation=0.99, viscosity=0.0001)
 
             p_rve.setElementType(regions=(p_rve.sets['set_CohesiveElements'].elements,),
                                  elemTypes=(elemType_coh,))
